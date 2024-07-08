@@ -6,14 +6,19 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.popup import Popup
+from kivy.uix.textinput import TextInput
 from kivy.uix.behaviors import ButtonBehavior
 import json
 from datetime import date
 import os
 
 def get_api_key():
-    with open('api_key.py', 'r') as file:
-        return file.read().strip()
+    try:
+        with open('api_key.json', 'r') as file:
+            data = json.load(file)
+            return data.get('api_key', '').strip()
+    except FileNotFoundError:
+        return ''
 
 class ImageButton(ButtonBehavior, Image):
     pass
@@ -40,6 +45,10 @@ class FunFactApp(App):
         history_button.bind(on_press=self.show_history)
         root_layout.add_widget(history_button)
 
+        key_button = Button(text="API Key", size_hint=(None, None), size=(100, 50), pos_hint={'x': 0, 'y': 0})
+        key_button.bind(on_press=self.show_key_popup)
+        root_layout.add_widget(key_button)
+
         if self.check_fun_fact_fetched_today():
             self.set_button_disabled()
             self.fact_label.text = "Sorry! You've already seen today's fun fact."
@@ -50,16 +59,23 @@ class FunFactApp(App):
     def fetch_and_display_fact(self, *args):
         api_url = 'https://api.api-ninjas.com/v1/facts?'
         my_api_key = get_api_key()
+        if not my_api_key:
+            error_popup = Popup(title='Error', content=Label(text="API key is missing. Please set the API key using the 'Key' button."), size_hint=(0.8, 0.4))
+            error_popup.open()
+            return
         headers = {'X-Api-Key': my_api_key}
-        response = requests.get(api_url, headers=headers)
-
-        if response.status_code == requests.codes.ok:
-            fact = response.json()[0]['fact']
-            self.fact_label.text = fact + "\n\nThat's today's fun fact, come back tomorrow for more!"
-            self.set_button_disabled()
-            self.record_fun_fact_fetched_today(fact)
-        else:
-            error_popup = Popup(title='Error', content=Label(text=f"Error: {response.status_code}\n{response.text}"), size_hint=(0.8, 0.4))
+        try:
+            response = requests.get(api_url, headers=headers)
+            if response.status_code == requests.codes.ok:
+                fact = response.json()[0]['fact']
+                self.fact_label.text = fact + "\n\nThat's today's fun fact, come back tomorrow for more!"
+                self.set_button_disabled()
+                self.record_fun_fact_fetched_today(fact)
+            else:
+                error_popup = Popup(title='Error', content=Label(text=f"Error: {response.status_code}\n{response.text}"), size_hint=(0.8, 0.4))
+                error_popup.open()
+        except requests.exceptions.RequestException as e:
+            error_popup = Popup(title='Error', content=Label(text=f"Failed to fetch fun fact \nPlease check your internet connection or API key validity."), size_hint=(0.8, 0.4))
             error_popup.open()
 
     def set_button_disabled(self):
@@ -112,6 +128,28 @@ class FunFactApp(App):
                 history_popup.open()
         except FileNotFoundError:
             error_popup = Popup(title='Error', content=Label(text="No history found."), size_hint=(0.8, 0.4))
+            error_popup.open()
+
+    def show_key_popup(self, *args):
+        key_popup_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        key_popup_label = Label(text="Enter API Key:", size_hint=(None, None), size=(200, 50))
+        self.key_popup_textinput = TextInput(size_hint=(None, None), size=(400, 50), multiline=False)
+        key_popup_submit = Button(text="Submit", size_hint=(None, None), size=(200, 50))
+        key_popup_submit.bind(on_press=self.save_api_key)
+        key_popup_layout.add_widget(key_popup_label)
+        key_popup_layout.add_widget(self.key_popup_textinput)
+        key_popup_layout.add_widget(key_popup_submit)
+        self.key_popup = Popup(title='API Key', content=key_popup_layout, size_hint=(0.8, 0.4))
+        self.key_popup.open()
+
+    def save_api_key(self, *args):
+        api_key = self.key_popup_textinput.text.strip()
+        if api_key:
+            with open('api_key.json', 'w') as file:
+                json.dump({'api_key': api_key}, file)
+            self.key_popup.dismiss()
+        else:
+            error_popup = Popup(title='Error', content=Label(text="API key cannot be empty."), size_hint=(0.8, 0.4))
             error_popup.open()
 
 if __name__ == '__main__':
