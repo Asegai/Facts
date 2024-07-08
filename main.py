@@ -4,13 +4,19 @@ from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.button import Button
+from kivy.uix.image import Image
 from kivy.uix.popup import Popup
+from kivy.uix.behaviors import ButtonBehavior
 import json
 from datetime import date
+import os
 
 def get_api_key():
     with open('api_key.py', 'r') as file:
         return file.read().strip()
+
+class ImageButton(ButtonBehavior, Image):
+    pass
 
 class FunFactApp(App):
     def build(self):
@@ -25,9 +31,14 @@ class FunFactApp(App):
         self.fact_label = Label(text="", font_size='20sp', halign='center', valign='top', size_hint=(None, None), pos_hint={'center_x': 0.5, 'center_y': 0.5}, text_size=(400, None), size_hint_y=None)
         root_layout.add_widget(self.fact_label)
 
-        exit_button = Button(text="X", size_hint=(None, None), size=(50, 50), pos_hint={'right': 1, 'top': 1})
-        exit_button.bind(on_press=self.stop)
-        root_layout.add_widget(exit_button)
+        BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+        close_button = ImageButton(source=os.path.join(BASE_PATH, 'close_button_icon.png'), size_hint=(None, None), size=(50, 50), pos_hint={'right': 1, 'top': 1})
+        close_button.bind(on_press=self.stop)
+        root_layout.add_widget(close_button)
+
+        history_button = ImageButton(source=os.path.join(BASE_PATH, 'history_icon.png'), size_hint=(None, None), size=(50, 50), pos_hint={'x': 0, 'top': 1})
+        history_button.bind(on_press=self.show_history)
+        root_layout.add_widget(history_button)
 
         if self.check_fun_fact_fetched_today():
             self.set_button_disabled()
@@ -35,7 +46,6 @@ class FunFactApp(App):
             self.display_saved_fun_fact()
 
         return root_layout
-
 
     def fetch_and_display_fact(self, *args):
         api_url = 'https://api.api-ninjas.com/v1/facts?'
@@ -86,11 +96,23 @@ class FunFactApp(App):
             with open('today_fact.json', 'r') as file:
                 data = json.load(file)
                 fact = data[today]['fact']
-                self.fact_label.text = fact + "\n\nThe fact above is today's fun fact, come back tomorrow for more!"
+                self.fact_label.text = fact + "\n\nThat's today's fun fact, come back tomorrow for more!"
         except FileNotFoundError:
             pass
         except KeyError:
             pass
+
+    def show_history(self, *args):
+        try:
+            with open('today_fact.json', 'r') as file:
+                data = json.load(file)
+                facts = "\n".join(f"{date}: {details['fact']}" for date, details in data.items())
+                history_content = Label(text=facts, text_size=(400, None), valign='top', halign='left')
+                history_popup = Popup(title='History', content=history_content, size_hint=(0.8, 0.8))
+                history_popup.open()
+        except FileNotFoundError:
+            error_popup = Popup(title='Error', content=Label(text="No history found."), size_hint=(0.8, 0.4))
+            error_popup.open()
 
 if __name__ == '__main__':
     FunFactApp().run()
