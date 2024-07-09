@@ -8,13 +8,17 @@ from kivy.uix.image import Image
 from kivy.uix.popup import Popup
 from kivy.uix.textinput import TextInput
 from kivy.uix.behaviors import ButtonBehavior
+from kivy.utils import platform
 import json
 from datetime import date
 import os
 
+BASE_PATH = os.path.dirname(os.path.abspath(__file__))
+ASSETS_PATH = os.path.join(BASE_PATH, 'assets')
+
 def get_api_key():
     try:
-        with open('api_key.json', 'r') as file:
+        with open(os.path.join(ASSETS_PATH, 'api_key.json'), 'r') as file:
             data = json.load(file)
             return data.get('api_key', '').strip()
     except FileNotFoundError:
@@ -36,18 +40,21 @@ class FunFactApp(App):
         self.fact_label = Label(text="", font_size='20sp', halign='center', valign='top', size_hint=(None, None), pos_hint={'center_x': 0.5, 'center_y': 0.5}, text_size=(400, None), size_hint_y=None)
         root_layout.add_widget(self.fact_label)
 
-        BASE_PATH = os.path.dirname(os.path.abspath(__file__))
-        close_button = ImageButton(source=os.path.join(BASE_PATH, 'close_button_icon.png'), size_hint=(None, None), size=(50, 50), pos_hint={'right': 1, 'top': 1})
+        close_button = ImageButton(source=os.path.join(ASSETS_PATH, 'close_button_icon.png'), size_hint=(None, None), size=(50, 50), pos_hint={'right': 1, 'top': 1})
         close_button.bind(on_press=self.stop)
         root_layout.add_widget(close_button)
 
-        history_button = ImageButton(source=os.path.join(BASE_PATH, 'history_icon.png'), size_hint=(None, None), size=(50, 50), pos_hint={'x': 0, 'top': 1})
+        history_button = ImageButton(source=os.path.join(ASSETS_PATH, 'history_icon.png'), size_hint=(None, None), size=(50, 50), pos_hint={'x': 0, 'top': 1})
         history_button.bind(on_press=self.show_history)
         root_layout.add_widget(history_button)
 
         key_button = Button(text="API Key", size_hint=(None, None), size=(100, 50), pos_hint={'x': 0, 'y': 0})
         key_button.bind(on_press=self.show_key_popup)
         root_layout.add_widget(key_button)
+
+        share_button = ImageButton(source=os.path.join(ASSETS_PATH, 'share_icon.png'), size_hint=(None, None), size=(50, 50), pos_hint={'right': 1, 'bottom': 1})
+        share_button.bind(on_press=self.share_fun_fact)
+        root_layout.add_widget(share_button)
 
         if self.check_fun_fact_fetched_today():
             self.set_button_disabled()
@@ -85,7 +92,7 @@ class FunFactApp(App):
     def check_fun_fact_fetched_today(self):
         today = date.today().isoformat()
         try:
-            with open('today_fact.json', 'r') as file:
+            with open(os.path.join(ASSETS_PATH, 'today_fact.json'), 'r') as file:
                 data = json.load(file)
                 return data.get(today, False)
         except FileNotFoundError:
@@ -94,7 +101,7 @@ class FunFactApp(App):
     def record_fun_fact_fetched_today(self, fact):
         today = date.today().isoformat()
         try:
-            with open('today_fact.json', 'r+') as file:
+            with open(os.path.join(ASSETS_PATH, 'today_fact.json'), 'r+') as file:
                 data = json.load(file)
                 data[today] = {
                     'fact': fact
@@ -102,14 +109,14 @@ class FunFactApp(App):
                 file.seek(0)
                 json.dump(data, file, indent=4)
         except FileNotFoundError:
-            with open('today_fact.json', 'w') as file:
+            with open(os.path.join(ASSETS_PATH, 'today_fact.json'), 'w') as file:
                 data = {today: {'fact': fact}}
                 json.dump(data, file, indent=4)
 
     def display_saved_fun_fact(self):
         today = date.today().isoformat()
         try:
-            with open('today_fact.json', 'r') as file:
+            with open(os.path.join(ASSETS_PATH, 'today_fact.json'), 'r') as file:
                 data = json.load(file)
                 fact = data[today]['fact']
                 self.fact_label.text = fact + "\n\nThat's today's fun fact, come back tomorrow for more!"
@@ -120,7 +127,7 @@ class FunFactApp(App):
 
     def show_history(self, *args):
         try:
-            with open('today_fact.json', 'r') as file:
+            with open(os.path.join(ASSETS_PATH, 'today_fact.json'), 'r') as file:
                 data = json.load(file)
                 facts = "\n".join(f"{date}: {details['fact']}" for date, details in data.items())
                 history_content = Label(text=facts, text_size=(400, None), valign='top', halign='left')
@@ -145,11 +152,48 @@ class FunFactApp(App):
     def save_api_key(self, *args):
         api_key = self.key_popup_textinput.text.strip()
         if api_key:
-            with open('api_key.json', 'w') as file:
+            with open(os.path.join(ASSETS_PATH, 'api_key.json'), 'w') as file:
                 json.dump({'api_key': api_key}, file)
             self.key_popup.dismiss()
         else:
             error_popup = Popup(title='Error', content=Label(text="API key cannot be empty."), size_hint=(0.8, 0.4))
+            error_popup.open()
+
+    def share_fun_fact(self, *args):
+        today = date.today().isoformat()
+        try:
+            with open(os.path.join(ASSETS_PATH, 'today_fact.json'), 'r') as file:
+                data = json.load(file)
+                fact = data[today]['fact']
+                if platform == 'android':
+                    from jnius import autoclass
+                    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                    Intent = autoclass('android.content.Intent')
+                    intent = Intent()
+                    intent.setAction(Intent.ACTION_SEND)
+                    intent.putExtra(Intent.EXTRA_TEXT, fact)
+                    intent.setType('text/plain')
+                    currentActivity = PythonActivity.mActivity
+                    currentActivity.startActivity(intent)
+                elif platform == 'ios':
+                    # iOS sharing 
+                    pass
+                elif platform == 'win':
+                    from kivy.core.clipboard import Clipboard
+                    Clipboard.copy(fact)
+                    info_popup = Popup(title='Info', content=Label(text="Fun fact copied to clipboard!"), size_hint=(0.8, 0.4))
+                    info_popup.open()
+                elif platform == 'android':
+                    # android sharing
+                    pass
+                else:
+                    # Desktop sharing and others
+                    pass
+        except FileNotFoundError:
+            error_popup = Popup(title='Error', content=Label(text="No fun fact found for today."), size_hint=(0.8, 0.4))
+            error_popup.open()
+        except KeyError:
+            error_popup = Popup(title='Error', content=Label(text="No fun fact found for today."), size_hint=(0.8, 0.4))
             error_popup.open()
 
 if __name__ == '__main__':
